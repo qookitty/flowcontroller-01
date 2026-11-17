@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>流量控制器選型資訊圖表</title>
+<script src="https://artifactcdn.diabrowser.engineering/ajax/libs/Chart.js/chart.umd.js"></script>
+<style>
+:root{
+  --paper:#f4efe4; --paper2:#ebe4d3; --card:#fbf8f1;
+  --ink:#1d2a3a; --ink2:#4a5566; --muted:#7c8594; --rule:#d3c9b4;
+  --thermal:#1f5f8b; --coriolis:#c4532b; --accent:#c4532b; --ok:#2f7a4f; --warn:#b7861a;
+  --mono:"Cascadia Mono","Consolas","SF Mono",monospace;
+  --serif:"Noto Serif TC","Source Han Serif TC","PMingLiU","Songti TC",serif;
+  --sans:"Microsoft JhengHei UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.6;
+  background-image:linear-gradient(var(--paper2) 1px,transparent 1px),linear-gradient(90deg,var(--paper2) 1px,transparent 1px);
+  background-size:28px 28px;padding-bottom:72px}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+header.hero{padding:48px 0 28px;border-bottom:2px solid var(--ink)}
+.tag{font-family:var(--mono);font-size:12px;letter-spacing:.12em;color:var(--accent);text-transform:uppercase}
+h1{font-family:var(--serif);font-size:clamp(30px,4.6vw,54px);line-height:1.15;margin:10px 0 14px;font-weight:900}
+h1 em{font-style:normal;color:var(--accent)}
+.lead{font-size:17px;color:var(--ink2);max-width:820px;margin:0}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:26px}
+.kpi{background:var(--card);border:1.5px solid var(--ink);padding:14px 16px;position:relative}
+.kpi b{font-family:var(--mono);font-size:26px;display:block;color:var(--ink)}
+.kpi span{font-size:13px;color:var(--ink2)}
+.kpi::after{content:"";position:absolute;right:-6px;bottom:-6px;width:100%;height:100%;border:1.5px solid var(--rule);z-index:-1}
+nav.tabs{position:sticky;top:0;z-index:20;background:var(--paper);border-bottom:1.5px solid var(--ink);margin-bottom:28px}
+nav.tabs .wrap{display:flex;gap:4px;overflow-x:auto}
+nav.tabs button{font:600 14px var(--sans);background:none;border:none;padding:14px 14px 12px;color:var(--ink2);cursor:pointer;white-space:nowrap;border-bottom:3px solid transparent}
+nav.tabs button .n{font-family:var(--mono);color:var(--muted);margin-right:6px}
+nav.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button:hover{color:var(--ink)}
+section.panel{display:none;animation:rise .45s ease}
+section.panel.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+h2{font-family:var(--serif);font-size:30px;margin:0 0 6px;font-weight:900}
+.sub{color:var(--ink2);margin:0 0 22px;max-width:860px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.card{background:var(--card);border:1.5px solid var(--ink);padding:18px 20px;min-width:0}
+.card h3{font-family:var(--serif);font-size:19px;margin:0 0 10px}
+.note{font-size:12px;color:var(--muted);margin-top:8px}
+.chartbox{position:relative;width:100%;height:clamp(280px,42vh,400px);overflow:hidden}
+/* compare */
+.duel{display:grid;grid-template-columns:minmax(0,1fr) 150px minmax(0,1fr);border:1.5px solid var(--ink);background:var(--card)}
+.duel .head{padding:14px 16px;font-family:var(--serif);font-weight:900;font-size:20px;color:#fff}
+.duel .head.t{background:var(--thermal)} .duel .head.c{background:var(--coriolis);text-align:right}
+.duel .head.m{background:var(--ink);font-size:13px;font-family:var(--mono);display:flex;align-items:center;justify-content:center}
+.row{display:contents;cursor:pointer}
+.row>div{padding:10px 16px;border-top:1px solid var(--rule);font-size:14px;transition:background .2s}
+.row .k{text-align:center;font-weight:700;font-size:13px;background:var(--paper2);display:flex;align-items:center;justify-content:center}
+.row .r{text-align:right}
+.row:hover>div{background:#fff3d9}
+.row.win-t .l{box-shadow:inset 4px 0 0 var(--thermal)} .row.win-c .r{box-shadow:inset -4px 0 0 var(--coriolis)}
+.filterbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.chip{font:600 13px var(--sans);padding:6px 12px;border:1.5px solid var(--ink);background:var(--card);cursor:pointer;border-radius:999px;color:var(--ink)}
+.chip.on{background:var(--ink);color:var(--paper)}
+/* loop svg */
+.loop svg{width:100%;height:auto;display:block}
+.flowdot{animation:dash 1.6s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-40}}
+/* checklist */
+.check{border:1.5px solid var(--ink);background:var(--card);padding:12px 14px;cursor:pointer;transition:transform .15s, box-shadow .15s;min-width:0}
+.check:hover{transform:translate(-2px,-2px);box-shadow:4px 4px 0 var(--ink)}
+.check .t{font-weight:800;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.check .t small{font-family:var(--mono);color:var(--muted);font-weight:400}
+.check .d{max-height:0;overflow:hidden;transition:max-height .35s ease;font-size:13.5px;color:var(--ink2)}
+.check.open .d{max-height:260px}
+.check .d p{margin:8px 0 0}
+.check .d .j{border-left:3px solid var(--accent);padding-left:8px;color:var(--ink)}
+.check.done{background:#e6f0e8}
+.check .box{width:18px;height:18px;border:1.5px solid var(--ink);display:inline-flex;align-items:center;justify-content:center;font-size:12px;flex:none;background:#fff}
+.check.done .box{background:var(--ok);color:#fff;border-color:var(--ok)}
+.progress{height:10px;border:1.5px solid var(--ink);background:var(--card);margin:6px 0 18px}
+.progress i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+/* scenario */
+.scen{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px}
+.scen-list button{display:block;width:100%;text-align:left;font:600 15px var(--sans);padding:12px 14px;margin-bottom:8px;background:var(--card);border:1.5px solid var(--ink);cursor:pointer;color:var(--ink)}
+.scen-list button.on{background:var(--ink);color:var(--paper)}
+.scen-list button small{display:block;font-weight:400;font-size:12px;opacity:.75}
+.badge{display:inline-block;font:700 12px var(--mono);padding:3px 8px;border:1.5px solid currentColor;margin-right:6px}
+.spec{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 14px;margin-top:14px;font-size:14.5px}
+.spec dt{font-weight:800;color:var(--ink2)} .spec dd{margin:0}
+.steps{display:flex;flex-wrap:wrap;gap:0;margin-top:6px}
+.step{flex:1 1 130px;border:1.5px solid var(--ink);margin:-0.75px;padding:12px;background:var(--card);cursor:pointer;min-width:0;position:relative}
+.step b{font-family:var(--mono);color:var(--accent);font-size:20px;display:block}
+.step.on{background:var(--ink);color:var(--paper)} .step.on b{color:#f3a37f}
+.stepinfo{border:1.5px dashed var(--ink);border-top:none;padding:12px 16px;background:#fffaf0;font-size:14.5px}
+/* comm */
+.comm table{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}
+.comm th,.comm td{border:1px solid var(--rule);padding:8px 10px;text-align:left;vertical-align:top}
+.comm th{background:var(--ink);color:var(--paper);font-weight:700}
+.comm tr.hl td{background:#fff0d0}
+.comm tr.dim td{opacity:.35}
+.meter{display:inline-flex;gap:2px} .meter i{width:10px;height:10px;border:1px solid var(--ink)} .meter i.f{background:var(--ink)}
+/* calc */
+.calc label{display:block;font-size:13px;font-weight:700;color:var(--ink2);margin-top:12px}
+.calc input[type=range]{width:100%;accent-color:var(--accent)}
+.calc .val{font-family:var(--mono);font-size:15px;color:var(--ink)}
+.out{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:16px}
+.out .o{border:1.5px solid var(--ink);padding:12px;background:#fff}
+.out .o .big{font-family:var(--mono);font-size:28px;font-weight:700}
+.out .o.fs{border-left:6px solid var(--coriolis)} .out .o.sp{border-left:6px solid var(--thermal)}
+.band{position:relative;height:46px;margin-top:14px;border:1.5px solid var(--ink);background:#fff}
+.band .z{position:absolute;top:0;bottom:0;opacity:.85}
+.band .c{position:absolute;top:-6px;bottom:-6px;width:2px;background:var(--ink)}
+.warnbox{margin-top:12px;padding:10px 12px;border:1.5px solid var(--warn);background:#fbf1d6;font-size:14px}
+.acc3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.acc3 .card b{font-family:var(--mono);font-size:22px;color:var(--accent)}
+/* errors */
+.err{border:1.5px solid var(--ink);background:var(--card);min-height:120px;perspective:800px;cursor:pointer;position:relative}
+.err .in{position:relative;width:100%;height:100%;min-height:120px;transition:transform .5s;transform-style:preserve-3d}
+.err.flip .in{transform:rotateY(180deg)}
+.err .f,.err .b{position:absolute;inset:0;padding:14px;backface-visibility:hidden}
+.err .b{transform:rotateY(180deg);background:#e6f0e8}
+.err .f h4,.err .b h4{margin:0 0 6px;font-size:16px}
+.err .f p,.err .b p{margin:0;font-size:13.5px;color:var(--ink2)}
+.err .hint{position:absolute;right:10px;bottom:8px;font:11px var(--mono);color:var(--muted)}
+.rules{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px}
+.rule{padding:14px;border-top:4px solid var(--ink);background:var(--card)}
+.rule b{display:block;margin-bottom:4px}
+.sheet{margin-top:26px;border:2px solid var(--ink);background:#fff;padding:18px 22px}
+.sheet h3{font-family:var(--serif);margin:0 0 12px}
+.sheet .f{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.sheet input,.sheet select{width:100%;font:14px var(--sans);padding:8px;border:1.5px solid var(--ink);background:var(--paper)}
+.sheet label{font-size:12px;font-weight:700;color:var(--ink2)}
+.btn{font:700 14px var(--sans);padding:9px 16px;border:1.5px solid var(--ink);background:var(--accent);color:#fff;cursor:pointer;margin-top:14px;box-shadow:3px 3px 0 var(--ink)}
+#advice{margin-top:14px;font-size:14.5px}
+#advice li{margin-bottom:4px}
+footer{margin-top:40px;padding-top:14px;border-top:1.5px solid var(--ink);font-size:12.5px;color:var(--muted)}
+footer a{color:var(--ink2)}
+@media (max-width:860px){
+  .grid2,.scen,.kpis{grid-template-columns:minmax(0,1fr)}
+  .grid3,.rules,.acc3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .duel{grid-template-columns:minmax(0,1fr) 86px minmax(0,1fr)}
+  .comm{overflow-x:auto}
+}
+@media (max-width:520px){.grid3,.rules,.acc3,.out{grid-template-columns:minmax(0,1fr)}}
+@media print{
+  nav.tabs,.btn,.filterbar{display:none}
+  section.panel{display:block!important;break-before:page}
+  section.panel:first-of-type{break-before:auto}
+  .check .d{max-height:none}
+  .err .in{transform:none!important} .err .b{position:relative;transform:none}
+  body{padding-bottom:0}
+}
+</style>
+</head>
+<body>
+<header class="hero"><div class="wrap">
+  <div class="tag">Flow Controller Field Guide · 1 吋以內管徑</div>
+  <h1>氣體選<em>熱質式</em>，液體配料選<em>科氏力</em>；<br>選型前先看懂精度表示法。</h1>
+  <p class="lead">把熱質式與科氏力比較、半導體級 MFC 選型、化學液體選型範例、通訊介面、精度與誤差這五個主題整理成一頁互動圖表。點選上方分頁切換主題，表格列、卡片和滑桿都可以操作。</p>
+  <div class="kpis">
+    <div class="kpi"><b>±0.2% Rd</b><span>科氏力液體高精度型常見等級</span></div>
+    <div class="kpi"><b>1000:1</b><span>HORIBA 超寬範圍機種調節比</span></div>
+    <div class="kpi"><b>≤0.5 s</b><span>Fujikin FCSP7000 響應時間</span></div>
+    <div class="kpi"><b>20–80%</b><span>建議正常操作點佔滿量程比例</span></div>
+  </div>
+</div></header>
+
+<nav class="tabs"><div class="wrap" id="tabs">
+  <button class="on" data-t="p1"><span class="n">01</span>熱質式 vs 科氏力</button>
+  <button data-t="p2"><span class="n">02</span>半導體 MFC 選型</button>
+  <button data-t="p3"><span class="n">03</span>化學液體選型</button>
+  <button data-t="p4"><span class="n">04</span>通訊介面</button>
+  <button data-t="p5"><span class="n">05</span>精度與誤差</button>
+</div></nav>
+
+<main class="wrap">
+
+<!-- 01 -->
+<section class="panel on" id="p1">
+  <h2>熱質式 vs 科氏力</h2>
+  <p class="sub">熱質式壓損低、校正成熟，是半導體氣體控制的主流。科氏力直接量測質量流量，受壓力與溫度變化的影響較小，適合化學液體與批次配料。左側色條代表熱質式較有利，右側色條代表科氏力較有利。</p>
+  <div class="filterbar" id="duelFilter">
+    <button class="chip on" data-f="all">全部項目</button>
+    <button class="chip" data-f="t">熱質式較佳</button>
+    <button class="chip" data-f="c">科氏力較佳</button>
+  </div>
+  <div class="grid2">
+    <div class="duel" id="duel">
+      <div class="head t">熱質式 MFC</div><div class="head m">比較項目</div><div class="head c">科氏力</div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>綜合特性雷達</h3>
+        <div class="chartbox" id="radarBox"><canvas id="radar" aria-label="熱質式與科氏力特性雷達圖"></canvas></div>
+        <p class="note">分數是依本頁文字描述換算的相對評估（1–5），用來看差異方向，不是原廠量測數據。</p>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>一句話判斷</h3>
+        <p style="margin:0"><span class="badge" style="color:var(--thermal)">氣體</span>半導體特氣、CVD、蝕刻、鍍膜、燃燒控制 → 熱質式</p>
+        <p style="margin:8px 0 0"><span class="badge" style="color:var(--coriolis)">液體</span>化學品配料、藥液、燃料、精密液體添加 → 科氏力</p>
+        <p class="note">熱式量測液體時，因液體熱容量較高，響應與穩定時間常需 3 秒以上；兩者都不適合氣泡或兩相流。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="panel" id="p2">
+  <h2>半導體級 MFC 選型要點</h2>
+  <p class="sub">不能只比「精度 ±1%」，還要同時確認氣體相容性、洩漏率、潔淨度、壓力條件、響應、通訊與維護性。點卡片展開內容，點左側方框可勾選，當作選型檢查清單。</p>
+  <div class="grid2">
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700"><span>選型檢查進度</span><span id="progTxt" style="font-family:var(--mono)">0 / 13</span></div>
+      <div class="progress"><i id="prog"></i></div>
+      <div class="grid2" id="checks" style="gap:10px"></div>
+    </div>
+    <div>
+      <div class="card loop">
+        <h3>MFC 控制迴路</h3>
+        <svg viewBox="0 0 520 260" role="img" aria-label="MFC PID 控制迴路">
+          <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#1d2a3a"/></marker></defs>
+          <g font-family="Microsoft JhengHei, sans-serif" font-size="14" font-weight="700" fill="#1d2a3a">
+            <rect x="20" y="20" width="120" height="44" fill="#fbf8f1" stroke="#1d2a3a" stroke-width="1.5"/><text x="80" y="47" text-anchor="middle">設定值 SP</text>
+            <rect x="20" y="110" width="120" height="50" fill="#1d2a3a"/><text x="80" y="140" text-anchor="middle" fill="#f4efe4">PID 控制器</text>
+            <rect x="200" y="110" width="130" height="50" fill="#fbf8f1" stroke="#1d2a3a" stroke-width="1.5"/><text x="265" y="140" text-anchor="middle">比例控制閥</text>
+            <rect x="380" y="110" width="125" height="50" fill="#c4532b"/><text x="442" y="140" text-anchor="middle" fill="#fff">製程氣體流量</text>
+            <rect x="200" y="200" width="130" height="44" fill="#fbf8f1" stroke="#1f5f8b" stroke-width="2"/><text x="265" y="227" text-anchor="middle" fill="#1f5f8b">流量感測器</text>
+          </g>
+          <g stroke="#1d2a3a" stroke-width="2" fill="none" marker-end="url(#ar)">
+            <path d="M80 64V108"/><path d="M140 135H198"/><path d="M330 135H378"/>
+            <path d="M442 160V222H332"/><path d="M200 222H80V162"/>
+          </g>
+          <g stroke="#c4532b" stroke-width="4" fill="none" stroke-dasharray="4 16" class="flowdot">
+            <path d="M140 135H198"/><path d="M330 135H378"/><path d="M442 160V222H332"/><path d="M200 222H80V162"/>
+          </g>
+        </svg>
+        <p class="note" style="font-size:13.5px;color:var(--ink2)">內建感測器量測實際流量，與 SP 比較後由 PID 調整閥門開度，讓流量維持在設定值；設定與回授可用電壓、電流或數位訊號。</p>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <h3>情境對應建議</h3>
+        <div class="filterbar" id="semiTabs"></div>
+        <p id="semiOut" style="margin:0;font-size:14.5px"></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 -->
+<section class="panel" id="p3">
+  <h2>化學液體選型範例</h2>
+  <p class="sub">以濕製程常見情境整理。實際採購前，仍需用原廠流體相容表、壓力、溫度與管路條件確認。</p>
+  <div class="scen">
+    <div class="scen-list" id="scenList"></div>
+    <div class="card" id="scenOut"></div>
+  </div>
+  <h3 style="font-family:var(--serif);font-size:21px;margin:30px 0 6px">選型優先順序（點步驟看重點）</h3>
+  <div class="steps" id="steps"></div>
+  <div class="stepinfo" id="stepInfo"></div>
+</section>
+
+<!-- 04 -->
+<section class="panel" id="p4">
+  <h2>通訊介面與差異</h2>
+  <p class="sub">先選你的需求，表格會標出建議的介面。抗雜訊與診斷資訊的格數，是依本頁描述做的相對比較。</p>
+  <div class="filterbar" id="needBar"></div>
+  <div class="comm"><table id="commTable">
+    <thead><tr><th>介面</th><th>訊號形式</th><th>抗雜訊</th><th>診斷資訊</th><th>優點</th><th>限制</th><th>常見應用</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <p class="note">需與 PLC 深度整合時，優先確認 PLC 廠牌與既有通訊協定，避免另外加轉換模組。</p>
+</section>
+
+<!-- 05 -->
+<section class="panel" id="p5">
+  <h2>精度與誤差解讀</h2>
+  <p class="sub">同樣寫「±1%」，以滿量程（F.S.）或設定點（S.P.）計算，低流量時的實際誤差可以差到 10 倍。先確認規格書用的是哪一種表示法。</p>
+  <div class="acc3">
+    <div class="card"><b>% Rd</b><h3 style="margin:4px 0">讀值誤差</h3><p style="margin:0;font-size:14px">誤差隨實際流量變化，例如 ±0.2% Rd；寬範圍、高精度控制較有利。</p></div>
+    <div class="card"><b>% F.S.</b><h3 style="margin:4px 0">滿量程誤差</h3><p style="margin:0;font-size:14px">誤差以滿量程計算，例如 ±2% F.S.；低流量時相對誤差會放大。</p></div>
+    <div class="card"><b>% S.P.</b><h3 style="margin:4px 0">設定點誤差</h3><p style="margin:0;font-size:14px">誤差以設定值為基準，例如 ±1% S.P.；半導體 MFC 常用。</p></div>
+  </div>
+  <div class="grid2">
+    <div class="card calc">
+      <h3>誤差計算器</h3>
+      <label>滿量程 <span class="val" id="vFS">100</span> SCCM</label>
+      <input type="range" id="iFS" min="10" max="1000" step="10" value="100">
+      <label>設定流量 <span class="val" id="vSP">10</span> SCCM</label>
+      <input type="range" id="iSP" min="1" max="100" step="1" value="10">
+      <label>精度 ± <span class="val" id="vAcc">1.0</span> %</label>
+      <input type="range" id="iAcc" min="0.1" max="3" step="0.1" value="1">
+      <div class="out">
+        <div class="o fs"><div style="font-size:12px;font-weight:700">以 % F.S. 計</div><div class="big" id="oFS">10.0%</div><div id="oFSr" style="font-size:13px"></div></div>
+        <div class="o sp"><div style="font-size:12px;font-weight:700">以 % S.P. / % Rd 計</div><div class="big" id="oSP">1.0%</div><div id="oSPr" style="font-size:13px"></div></div>
+      </div>
+      <div class="band" id="band" aria-label="誤差帶"></div>
+      <div style="display:flex;justify-content:space-between;font:12px var(--mono);color:var(--muted);margin-top:4px"><span id="bL"></span><span>設定值</span><span id="bR"></span></div>
+      <div class="warnbox" id="warn"></div>
+    </div>
+    <div class="card">
+      <h3>相對誤差 vs 操作點（佔滿量程 %）</h3>
+      <div class="chartbox" id="lineBox"><canvas id="line" aria-label="相對誤差隨操作點變化"></canvas></div>
+      <p class="note">F.S. 規格在低流量區的相對誤差急遽上升，所以低流量控制要看 % Rd 或 % S.P.，並避免長期在滿量程 5% 以下操作。</p>
+    </div>
+  </div>
+
+  <h3 style="font-family:var(--serif);font-size:21px;margin:30px 0 10px">十大誤差來源（點卡片翻面看對策）</h3>
+  <div class="grid3" id="errs" style="grid-template-columns:repeat(auto-fill,minmax(210px,1fr))"></div>
+
+  <div class="rules" id="rules"></div>
+
+  <div class="sheet">
+    <h3>我的選型規格表</h3>
+    <p style="margin:-6px 0 12px;font-size:14px;color:var(--ink2)">先填流體名稱、流量範圍、管徑、壓力、腐蝕性、控制精度、通訊方式，再對應廠牌型號，避免只看精度而忽略材質、壓損與安裝限制。</p>
+    <div class="f">
+      <div><label>流體名稱</label><input id="sFluid" placeholder="例：顯影液 / N2"></div>
+      <div><label>流體狀態</label><select id="sPhase"><option value="gas">氣體</option><option value="liq">液體</option></select></div>
+      <div><label>流量範圍</label><input id="sRange" placeholder="例：0–200 g/h"></div>
+      <div><label>管徑</label><select id="sPipe"><option>1/8 吋</option><option selected>1/4 吋</option><option>3/8 吋</option><option>1/2 吋</option><option>3/4 吋</option><option>1 吋</option></select></div>
+      <div><label>壓力條件</label><select id="sPress"><option value="stable">穩定</option><option value="unstable">供應壓力不穩</option></select></div>
+      <div><label>腐蝕性</label><select id="sCorr"><option value="no">無 / 低</option><option value="yes">腐蝕性 / 特殊</option></select></div>
+      <div><label>控制精度需求</label><select id="sAcc"><option value="hi">高精度配料 / 低流量</option><option value="fast">重視快速響應</option><option value="std">一般穩定即可</option></select></div>
+      <div><label>通訊方式</label><select id="sComm"><option value="simple">單機 / 類比</option><option value="multi">多台遠端監控</option><option value="semi">半導體設備診斷</option><option value="sync">高速同步</option></select></div>
+    </div>
+    <button class="btn" id="gen">產生選型建議</button>
+    <div id="advice"></div>
+  </div>
+</section>
+
+<footer>
+  內容整理自本頁 Perplexity 回答，引用來源包含
+  <a href="https://www.horiba.com/twn/semiconductor/product/mass-flow-controller-and-module/mass-flow-control/" target="_blank">HORIBA MFC</a>、
+  <a href="https://semirai.com/tw/semiconductor-equipment/products/fujikin-fcsp7000" target="_blank">Fujikin FCSP7000</a>、
+  <a href="https://tsi.com/getmedia/a55e7405-27ac-40e1-8739-a6e8d12d1fb3/7938705780_2025_MSP_White-Paper_PID_A4_5003247_RevB_Web.pdf?ext=.pdf" target="_blank">TSI 白皮書</a>、
+  <a href="https://www.burkert-usa.com/en/content/download/7476/file/flyer_01585_2025_Product-Range-Flow-Pressure-Controller_pdf-web_en-GB.pdf?inLanguage=eng-INT&version=111" target="_blank">Bürkert 產品型錄</a>。
+  規格以原廠最新型錄為準。
+</footer>
+</main>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const charts={};
+// tabs
+$$('#tabs button').forEach(b=>b.onclick=()=>{
+  $$('#tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  $$('section.panel').forEach(p=>p.classList.toggle('on',p.id===b.dataset.t));
+  Object.values(charts).forEach(c=>c.resize());
+  window.scrollTo({top:$('nav.tabs').offsetTop,behavior:'smooth'});
+});
+
+// 01 duel
+const duel=[
+ ['量測原理','加熱元件熱傳變化，由溫度差換算流量','振動測量管產生科氏力相位差，直接換算質量流量',''],
+ ['適用介質','主要為單相氣體；液體熱式可用但響應較慢','氣體液體皆可，尤其適合液體與高密度流體','c'],
+ ['量測單位','SCCM、SLM、g/h','g/h、kg/h',''],
+ ['精度','常見 ±0.5%–±1% S.P. 或 F.S.','液體高精度型常見 ±0.2% Rd','c'],
+ ['重複性','良好，受校正與氣體條件影響','通常極佳，適合重複性配料','c'],
+ ['響應速度','熱質式較慢；壓差式液體控制器較快','響應良好，仍受閥門與管路動態影響',''],
+ ['密度/溫度影響','氣體組成、熱傳導係數、壓力溫度會影響校正','較不受壓力與溫度變化影響','c'],
+ ['黏度影響','氣體黏度影響相對較小','液體黏度影響壓損與響應','t'],
+ ['壓損','通常較低','通常較高（需通過振動管）','t'],
+ ['氣體更換','常需重新校正或轉換係數','對介質變化較不敏感','c'],
+ ['氣泡/兩相流','不適合兩相流或凝結流','對氣泡與兩相流敏感',''],
+ ['價格','較低，應用成熟','較高，液體高精度配料性價比佳','t'],
+ ['適用場合','半導體特氣、CVD、蝕刻、鍍膜、燃燒控制','化學品配料、藥液、燃料、精密液體添加',''],
+];
+const duelEl=$('#duel');
+duel.forEach(([k,t,c,w])=>{
+  const r=document.createElement('div'); r.className='row'+(w?' win-'+w:''); r.dataset.w=w;
+  r.innerHTML=`<div class="l">${t}</div><div class="k">${k}</div><div class="r">${c}</div>`;
+  duelEl.appendChild(r);
+});
+$$('#duelFilter .chip').forEach(ch=>ch.onclick=()=>{
+  $$('#duelFilter .chip').forEach(x=>x.classList.toggle('on',x===ch));
+  const f=ch.dataset.f;
+  $$('#duel .row').forEach(r=>r.style.display=(f==='all'||r.dataset.w===f)?'contents':'none');
+});
+Chart.defaults.font.family='"Microsoft JhengHei UI","Microsoft JhengHei","PingFang TC",sans-serif';
+Chart.defaults.color='#4a5566';
+charts.radar=new Chart($('#radar'),{type:'radar',
+  data:{labels:['精度','重複性','低壓損','價格優勢','液體適用','抗壓溫變化','氣體成熟度'],
+  datasets:[
+    {label:'熱質式 MFC',data:[3,3,5,5,2,2,5],borderColor:'#1f5f8b',backgroundColor:'rgba(31,95,139,.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#1f5f8b',pointBorderColor:'#fbf8f1',pointBorderWidth:2},
+    {label:'科氏力',data:[5,5,2,2,5,5,3],borderColor:'#c4532b',backgroundColor:'rgba(196,83,43,.15)',borderWidth:2,pointRadius:4,pointBackgroundColor:'#c4532b',pointBorderColor:'#fbf8f1',pointBorderWidth:2}]},
+  options:{responsive:true,maintainAspectRatio:false,
+    scales:{r:{min:0,max:5,ticks:{stepSize:1,display:false},grid:{color:'#d3c9b4'},angleLines:{color:'#d3c9b4'},pointLabels:{font:{size:13,weight:'700'},color:'#1d2a3a'}}},
+    plugins:{legend:{position:'bottom',labels:{usePointStyle:true,color:'#1d2a3a'}}}}});
+
+// 02 checklist
+const checks=[
+ ['氣體種類','N2、Ar、O2、H2、He、SiH4、NF3、WF6、腐蝕性氣體','腐蝕性、自燃性、毒性氣體需確認濕件材質、密封件與安全設計'],
+ ['流量範圍','最小、正常、最大流量；是否需多範圍','正常點建議落在滿量程 20%–80%；避免長期低於 5%'],
+ ['控制範圍','Turndown ratio：50:1、100:1、1000:1','HORIBA 提供調節比可達 1000:1 的超寬範圍機種'],
+ ['精度與重複性','% S.P.、% F.S.、% Rd、零點漂移、長期穩定性','半導體常以 % S.P. 評估；低流量段需另看 % F.S.'],
+ ['壓力條件','入口/出口壓力、最大壓差、背壓需求','壓力不足時閥全開仍達不到 SP；壓力變動影響穩定性'],
+ ['響應時間','到達設定點時間、穩定時間、過衝量','Fujikin FCSP7000 標示響應時間 0.5 秒以下'],
+ ['洩漏率','外漏、內漏、閥座洩漏、He leak rate','部分 MFC 標示 1×10⁻¹⁰ Pa·m³/s He 以下'],
+ ['潔淨度','無油、VCR 接頭、粒子控制、包裝與置換性','常採完全禁油、SUS316L、電解拋光與 VCR 接頭'],
+ ['材質相容性','本體、密封件、感測器、閥門材質','常見 SUS316L、鎳鈷合金、Viton、全金屬密封'],
+ ['通訊與控制','0–5 V、4–20 mA、RS-485、DeviceNet、PROFIBUS、EtherCAT','HORIBA 支援類比、數位、DeviceNet、PROFIBUS、EtherCAT'],
+ ['安裝方向','是否可任意方向安裝、是否需直管段','Fujikin FCSP7000 標示不受安裝方向影響'],
+ ['診斷與維護','零點校正、流量自我診斷、置換性、備品策略','FCSP7000 具流量自我診斷與多氣體 flow factor'],
+ ['安全與認證','防爆、SEMI 標準、CE、UL、氣體安全聯鎖','需配合氣櫃、VMB、互鎖、洩漏偵測與緊急遮斷'],
+];
+const ck=$('#checks');
+checks.forEach(([t,c,j],i)=>{
+  const d=document.createElement('div'); d.className='check';
+  d.innerHTML=`<div class="t"><span style="display:flex;gap:8px;align-items:center"><span class="box"></span>${t}</span><small>${String(i+1).padStart(2,'0')}</small></div><div class="d"><p>${c}</p><p class="j">${j}</p></div>`;
+  d.onclick=e=>{ if(e.target.closest('.box')){d.classList.toggle('done');upd();} else d.classList.toggle('open'); };
+  ck.appendChild(d);
+});
+function upd(){const n=$$('.check.done').length;$('#progTxt').textContent=n+' / 13';$('#prog').style.width=(n/13*100)+'%';}
+const semi={
+ '標準製程氣體':'HORIBA STEC、Brooks、Fujikin 的熱質式或壓差式 MFC，重視高穩定性。',
+ '腐蝕/特殊氣體':'優先確認全金屬密封、耐腐蝕材質、VCR 接頭、無油潔淨度與氣體相容表。',
+ '多氣體共用':'選多氣體、多範圍 MFC；HORIBA 指出可由使用者更改氣體類型與流量範圍，減少庫存。',
+ '快速切換':'優先考慮壓電閥、壓差式感測或高響應熱質式設計，兼顧低壓損。',
+ '供氣壓力不穩':'選壓力不敏感型或具壓力補償的 MFC；Fujikin FCSP7000 標示供給壓力變動時控制流量幾乎不受影響。'};
+const st=$('#semiTabs');
+Object.keys(semi).forEach((k,i)=>{const b=document.createElement('button');b.className='chip'+(i?'':' on');b.textContent=k;
+  b.onclick=()=>{$$('#semiTabs .chip').forEach(x=>x.classList.toggle('on',x===b));$('#semiOut').textContent=semi[k];};st.appendChild(b);});
+$('#semiOut').textContent=semi['標準製程氣體'];
+
+// 03 scenarios
+const scen=[
+ {n:'顯影液微量添加',p:'科氏力',col:'var(--coriolis)',b:'Bronkhorst mini CORI-FLOW M12、Brooks Quantim QMC',s:'1/4 吋 OD 壓接頭或 VCR；0–200 g/h；液體 ±0.2% Rd；PTFE / PFA 濕件',r:'高精度、高重複性，適合藥液與化學品配料。'},
+ {n:'蝕刻液定量供給',p:'科氏力',col:'var(--coriolis)',b:'Bronkhorst mini CORI-FLOW M13/M14、Brooks Quantim QMC',s:'1/4 吋級；50–30,000 g/h；±0.2% Rd；耐腐蝕濕件',r:'直接量測質量流量，較不受密度與溫度變化影響。'},
+ {n:'清洗液 / 溶劑快速控制',p:'層流壓差式',col:'var(--thermal)',b:'Alicat LC / LCR',s:'1/8 或 1/4 吋；±2.0% F.S.；數位與類比 I/O',r:'響應快、安裝簡單，適合清潔、低黏度液體。'},
+ {n:'冷卻水 / 模具調溫',p:'流量感測＋步進馬達閥',col:'var(--ok)',b:'KOGANEI / 香岳 FLC600、FLC700',s:'0.5–20 L/min 或 5–100 L/min；PID；面板與外部類比設定',r:'重視耐用、穩定與成本，不追求極高精度配料。'},
+ {n:'批次式化學品配料',p:'科氏力',col:'var(--coriolis)',b:'Bürkert 8756、Bronkhorst mini CORI-FLOW、Brooks Quantim',s:'小流量、高重複性、數位通訊',r:'對壓力與溫度變化較不敏感，適合批次配料。'},
+ {n:'DI 水流量控制',p:'超音波或壓差式',col:'var(--warn)',b:'Bronkhorst ES-FLOW、Alicat LC',s:'低導電度液體；依流量與壓損選型',r:'超音波適合非導電性 DI 水；壓差式適合快速控制。'},
+];
+const sl=$('#scenList');
+scen.forEach((s,i)=>{const b=document.createElement('button');b.innerHTML=`${s.n}<small>${s.p}</small>`;
+  b.onclick=()=>{$$('#scenList button').forEach(x=>x.classList.toggle('on',x===b));showScen(s);};
+  if(!i)b.classList.add('on'); sl.appendChild(b);});
+function showScen(s){$('#scenOut').innerHTML=`<span class="badge" style="color:${s.col}">${s.p}</span><h3 style="font-size:26px;margin:10px 0 4px">${s.n}</h3><p style="margin:0;color:var(--ink2)">${s.r}</p>
+  <dl class="spec"><dt>建議廠牌/系列</dt><dd>${s.b}</dd><dt>建議規格</dt><dd>${s.s}</dd><dt>量測原理</dt><dd>${s.p}</dd></dl>
+  <p class="note">提醒：仍需以原廠流體相容表確認濕件材質。</p>`;$('#scenOut').animate([{opacity:0,transform:'translateX(8px)'},{opacity:1,transform:'none'}],{duration:300});}
+showScen(scen[0]);
+const steps=[
+ ['流體相容性','確認酸鹼、氧化性、溶劑性、顆粒與氣泡風險。'],
+ ['濕件材質','PFA、PTFE、316L、Hastelloy 等需對應化學相容性。'],
+ ['量測原理','高精度配料採科氏力；快速控制採壓差式；冷卻水採步進馬達閥式。'],
+ ['壓力與溫度','確認最大操作壓力、上下游壓差、流體與環境溫度。'],
+ ['精度與重複性','區分 % Rd、% F.S.、% S.P.，並確認低流量區規格。'],
+ ['通訊與整合','確認 PLC、SCADA、警報與遠端監控需求。'],
+];
+const sp=$('#steps');
+steps.forEach(([t,d],i)=>{const e=document.createElement('div');e.className='step'+(i?'':' on');e.innerHTML=`<b>0${i+1}</b>${t}`;
+  e.onclick=()=>{$$('.step').forEach(x=>x.classList.toggle('on',x===e));$('#stepInfo').innerHTML=`<b>${t}：</b>${d}`;};sp.appendChild(e);});
+$('#stepInfo').innerHTML=`<b>${steps[0][0]}：</b>${steps[0][1]}`;
+
+// 04 comm
+const comm=[
+ ['0–5 V 類比','電壓訊號',1,1,'簡單、低成本、易整合','易受雜訊、距離與接地影響','實驗設備、小型機台',['simple']],
+ ['4–20 mA 類比','電流訊號',3,1,'抗雜訊較佳、可遠距、具斷線偵測','僅單一變數，診斷有限','PLC、DCS、工業現場',['simple']],
+ ['RS-232','序列通訊',1,2,'設定與讀值方便','距離短、抗雜訊弱、非多點','實驗室、單機設定',[]],
+ ['RS-485 / Modbus RTU','差動序列通訊',3,2,'距離較遠、可多點','需注意鮑率、位址、終端電阻','多台 MFC、PLC 整合',['multi']],
+ ['DeviceNet','現場匯流排',4,4,'可讀寫流量、診斷與警報','需專用網路與設定','半導體設備、自動化',['semi']],
+ ['PROFIBUS','現場匯流排',4,4,'工業標準、診斷能力強','需專用網路與設定','PLC、DCS、製程控制',['semi']],
+ ['EtherCAT','工業乙太網路',4,5,'高速、低延遲、整合診斷','需支援 EtherCAT 的控制器','半導體設備、高速控制',['semi','sync']],
+ ['CC-Link','現場匯流排',4,3,'適合三菱系統整合','協定與設備支援需確認','自動化產線',[]],
+ ['IO-Link','點對點數位',3,4,'安裝簡單、可讀診斷、遠端設定','點對點，非多點匯流排','感測器、小型設備',[]],
+];
+const meter=n=>'<span class="meter">'+[1,2,3,4,5].map(i=>`<i class="${i<=n?'f':''}"></i>`).join('')+'</span>';
+$('#commTable tbody').innerHTML=comm.map(c=>`<tr data-n="${c[7].join(' ')}"><td><b>${c[0]}</b></td><td>${c[1]}</td><td>${meter(c[2])}</td><td>${meter(c[3])}</td><td>${c[4]}</td><td>${c[5]}</td><td>${c[6]}</td></tr>`).join('');
+const needs={all:'全部',simple:'單機 / 簡單控制',multi:'多台 MFC、遠端監控',semi:'半導體設備、診斷警報',sync:'高速同步控制'};
+Object.entries(needs).forEach(([k,v],i)=>{const b=document.createElement('button');b.className='chip'+(i?'':' on');b.textContent=v;
+  b.onclick=()=>{$$('#needBar .chip').forEach(x=>x.classList.toggle('on',x===b));
+    $$('#commTable tbody tr').forEach(r=>{const m=k==='all'||r.dataset.n.split(' ').includes(k);r.classList.toggle('hl',k!=='all'&&m);r.classList.toggle('dim',!m);});};
+  $('#needBar').appendChild(b);});
+
+// 05 calc
+function calc(){
+  const fs=+$('#iFS').value; $('#iSP').max=fs; $('#iSP').step=Math.max(1,fs/100);
+  let sp=Math.min(+$('#iSP').value,fs); const a=+$('#iAcc').value;
+  $('#vFS').textContent=fs;$('#vSP').textContent=+sp.toFixed(1);$('#vAcc').textContent=a.toFixed(1);
+  const eFS=fs*a/100, eSP=sp*a/100, rFS=eFS/sp*100;
+  $('#oFS').textContent=rFS.toFixed(1)+'%'; $('#oSP').textContent=a.toFixed(1)+'%';
+  $('#oFSr').textContent=`±${+eFS.toFixed(2)} SCCM → ${+(sp-eFS).toFixed(2)}–${+(sp+eFS).toFixed(2)}`;
+  $('#oSPr').textContent=`±${+eSP.toFixed(2)} SCCM → ${+(sp-eSP).toFixed(2)}–${+(sp+eSP).toFixed(2)}`;
+  const span=Math.max(eFS,eSP)*1.25, pct=v=>50+v/span*50;
+  $('#band').innerHTML=`<div class="z" style="left:${pct(-eFS)}%;width:${pct(eFS)-pct(-eFS)}%;background:#f2c3ae"></div><div class="z" style="left:${pct(-eSP)}%;width:${Math.max(.6,pct(eSP)-pct(-eSP))}%;background:#1f5f8b"></div><div class="c" style="left:50%"></div>`;
+  $('#bL').textContent=(sp-span).toFixed(2); $('#bR').textContent=(sp+span).toFixed(2);
+  const ratio=sp/fs*100;
+  $('#warn').innerHTML= ratio<5?`⚠ 操作點僅佔滿量程 ${ratio.toFixed(1)}%，低於 5%，不建議長期在此區操作，應改選較小量程。`
+   : ratio<20?`⚠ 操作點佔滿量程 ${ratio.toFixed(1)}%，低於建議的 20%–80%，F.S. 規格的相對誤差已被放大 ${(rFS/a).toFixed(1)} 倍。`
+   : ratio<=80?`✓ 操作點佔滿量程 ${ratio.toFixed(1)}%，落在建議的 20%–80% 區間。`
+   : `⚠ 操作點佔滿量程 ${ratio.toFixed(1)}%，高於 80%，留給控制的餘裕不足。`;
+  $('#warn').style.borderColor=(ratio>=20&&ratio<=80)?'var(--ok)':'var(--warn)';
+  $('#warn').style.background=(ratio>=20&&ratio<=80)?'#e6f0e8':'#fbf1d6';
+  const xs=[2,5,10,15,20,30,40,50,60,70,80,90,100];
+  charts.line.data.datasets[0].data=xs.map(x=>({x,y:+(a*100/x).toFixed(2)}));
+  charts.line.data.datasets[1].data=xs.map(x=>({x,y:a}));
+  charts.line.options.plugins.marker=ratio; charts.line.update('none');
+}
+const markerPlugin={id:'marker',afterDatasetsDraw(c){const r=c.options.plugins.marker;if(r==null)return;const x=c.scales.x;const px=x.getPixelForValue(Math.max(2,Math.min(100,r)));
+  const ctx=c.ctx;ctx.save();ctx.strokeStyle='#1d2a3a';ctx.setLineDash([4,4]);ctx.beginPath();ctx.moveTo(px,c.chartArea.top);ctx.lineTo(px,c.chartArea.bottom);ctx.stroke();
+  ctx.setLineDash([]);ctx.fillStyle='#1d2a3a';ctx.font='700 12px sans-serif';ctx.textAlign=px>c.chartArea.right-80?'right':'left';ctx.fillText(' 目前操作點 '+r.toFixed(0)+'%',px,c.chartArea.top+12);
+  ctx.fillStyle='rgba(47,122,79,.08)';ctx.fillRect(x.getPixelForValue(20),c.chartArea.top,x.getPixelForValue(80)-x.getPixelForValue(20),c.chartArea.bottom-c.chartArea.top);ctx.restore();}};
+charts.line=new Chart($('#line'),{type:'line',plugins:[markerPlugin],
+  data:{datasets:[
+    {label:'% F.S. 規格',data:[],borderColor:'#c4532b',backgroundColor:'#c4532b',borderWidth:2,pointRadius:3,tension:.3},
+    {label:'% S.P. / % Rd 規格',data:[],borderColor:'#1f5f8b',backgroundColor:'#1f5f8b',borderWidth:2,pointRadius:3}]},
+  options:{responsive:true,maintainAspectRatio:false,parsing:false,interaction:{mode:'index',intersect:false},
+    scales:{x:{type:'linear',min:0,max:100,title:{display:true,text:'操作點（佔滿量程 %）'},grid:{color:'#ebe4d3'}},
+            y:{type:'logarithmic',title:{display:true,text:'相對誤差 %（對數）'},grid:{color:'#ebe4d3'},ticks:{callback:v=>[0.1,0.5,1,2,5,10,20,50,100].includes(+v)?v+'%':''}}},
+    plugins:{legend:{position:'bottom',labels:{usePointStyle:true,filter:i=>i.text!=='_',color:'#1d2a3a'}},
+      tooltip:{callbacks:{title:i=>'操作點 '+i[0].parsed.x+'%',label:i=>i.dataset.label+'：±'+i.parsed.y+'%'}}}}});
+['#iFS','#iSP','#iAcc'].forEach(s=>$(s).addEventListener('input',calc));
+calc();
+
+const errs=[
+ ['零點漂移','長期使用後零點偏移，造成低流量誤差','定期零點校正、避免長期高溫與振動'],
+ ['氣體種類不符','熱質式對氣體熱特性敏感','使用正確氣體校正或轉換係數'],
+ ['壓力變動','影響流量與控制穩定性','選壓力補償型 MFC，穩定供氣壓力'],
+ ['溫度變動','影響熱質式與部分壓差式量測','選溫度補償型，避開陽光直射與熱源'],
+ ['黏度與密度變化','影響液體壓差式與控制響應','選科氏力式，或確認流體條件'],
+ ['氣泡與兩相流','量測不穩與控制震盪','加排氣、緩衝，避免空吸與液錘'],
+ ['顆粒與污染','堵塞感測器、閥門或流道','加裝過濾器、定期清洗與更換濾芯'],
+ ['安裝應力','零點漂移或感測器損壞','使用撓性接頭、正確支架，避免強行對位'],
+ ['PID 未調校','過衝、振盪或響應慢','依現場條件重新調校 PID'],
+ ['校正週期過長','精度逐漸下降','依原廠建議定期校正與驗證'],
+];
+$('#errs').innerHTML=errs.map(([t,i,c],n)=>`<div class="err"><div class="in"><div class="f"><h4>${String(n+1).padStart(2,'0')} ${t}</h4><p>${i}</p><span class="hint">翻面看對策 ↻</span></div><div class="b"><h4>對策</h4><p>${c}</p></div></div></div>`).join('');
+$$('.err').forEach(e=>e.onclick=()=>e.classList.toggle('flip'));
+const rules=[['低流量控制','優先看 % Rd 或 % S.P.，避免只看 % F.S.'],['高精度配料','優先選科氏力，並確認重複性與零點穩定度'],['快速響應','優先選壓差式液體控制器或高響應氣體 MFC'],['腐蝕性流體','先確認濕件材質與密封件，其次才是精度'],['半導體氣體','優先確認洩漏率、潔淨度、材質相容性與通訊診斷'],['長期穩定性','確認零點漂移、校正週期、環境溫度與振動']];
+$('#rules').innerHTML=rules.map(([t,d])=>`<div class="rule"><b>${t}</b>${d}</div>`).join('');
+
+$('#gen').onclick=()=>{
+  const ph=$('#sPhase').value,acc=$('#sAcc').value,corr=$('#sCorr').value,pr=$('#sPress').value,cm=$('#sComm').value,fl=$('#sFluid').value||'（未填流體）';
+  const L=[];
+  if(ph==='gas'){L.push(acc==='fast'?'量測原理：高響應熱質式或壓差式 MFC，可考慮壓電閥設計。':'量測原理：熱質式 MFC（HORIBA STEC、Brooks、Fujikin），壓損低、校正成熟。');}
+  else{L.push(acc==='hi'?'量測原理：科氏力（Bronkhorst mini CORI-FLOW、Brooks Quantim、Bürkert 8756），±0.2% Rd 等級。':acc==='fast'?'量測原理：層流壓差式（Alicat LC / LCR），響應快、適合低黏度清潔液體。':'量測原理：流量感測＋步進馬達閥（KOGANEI / 香岳 FLC600、FLC700），耐用且成本較低。');}
+  if(corr==='yes')L.push(ph==='gas'?'材質：全金屬密封、SUS316L 電解拋光、VCR 接頭，並核對氣體相容表。':'材質：PFA / PTFE / Hastelloy 等耐腐蝕濕件，並核對原廠流體相容表。');
+  if(pr==='unstable')L.push('壓力：選壓力不敏感或具壓力補償的機種（例如 Fujikin FCSP7000）。');
+  L.push({simple:'通訊：0–5 V 或 4–20 mA 類比即可。',multi:'通訊：RS-485 / Modbus RTU，注意位址與終端電阻。',semi:'通訊：DeviceNet、PROFIBUS 或 EtherCAT，可讀取診斷與警報。',sync:'通訊：EtherCAT，高速低延遲。'}[cm]);
+  L.push('量程：讓正常操作點落在滿量程 20%–80%，避免長期低於 5%。');
+  $('#advice').innerHTML=`<b>${fl}｜${$('#sPipe').value}｜${$('#sRange').value||'流量範圍待填'}</b><ul>${L.map(x=>'<li>'+x+'</li>').join('')}</ul><p class="note">建議為依本頁內容推導的初步方向，最終型號請以原廠型錄與相容表確認。</p>`;
+};
+new ResizeObserver(()=>Object.values(charts).forEach(c=>c.resize())).observe(document.body);
+</script>
+</body>
+</html>
